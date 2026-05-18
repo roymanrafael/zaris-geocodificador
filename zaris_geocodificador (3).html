@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZARIS · Geocodificador</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F5F3EE;--surface:#fff;--border:#E8E4DC;--border-s:#D4CFCA;
+  --txt:#1C1C1A;--txt2:#6B6760;--txt3:#A09C96;
+  --or:#D35C1A;--or-l:#FBF0EA;--or-b:#F0B995;
+  --gn:#2E7D52;--gn-l:#EAF5EE;
+  --rd:#C0392B;--rd-l:#FDECEA;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--txt);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* HEADER */
+header{height:52px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;z-index:100}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px}
+.brand-logo{width:26px;height:26px;background:var(--txt);border-radius:5px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.hdiv{width:1px;height:18px;background:var(--border-s)}
+.hmod{font-size:11px;font-weight:500;color:var(--txt2);text-transform:uppercase;letter-spacing:.08em}
+.hright{margin-left:auto;display:flex;align-items:center;gap:14px}
+.htime{font-size:11px;color:var(--txt2);font-family:var(--mono)}
+.uavatar{width:28px;height:28px;background:var(--txt);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:600}
+
+/* LAYOUT */
+.body{display:flex;overflow:hidden;height:calc(100vh - 52px)}
+#map{flex:1;min-width:0;height:100%;z-index:1}
+
+/* PANEL derecha */
+.panel{width:300px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;z-index:10}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:12px}
+.mc{background:var(--bg);border-radius:7px;padding:9px 11px;border-left:3px solid var(--border-s)}
+.mc.or{border-left-color:var(--or)}.mc.gn{border-left-color:var(--gn)}.mc.rd{border-left-color:var(--rd)}
+.mc-lbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--txt3);margin-bottom:3px}
+.mc-val{font-size:20px;font-weight:600;color:var(--txt);line-height:1}
+.mc-sub{font-size:9px;color:var(--txt3);margin-top:1px}
+
+/* SECTION */
+.sec{border-top:1px solid var(--border)}
+.sec-head{padding:8px 12px;background:var(--bg);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--txt2)}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tb{flex:1;padding:7px 2px;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:.15s}
+.tb:hover{color:var(--txt2)}.tb.on{color:var(--or);border-bottom-color:var(--or)}
+.tp{display:none;padding:12px;flex-direction:column;gap:8px}
+.tp.on{display:flex}
+
+/* FORM */
+input[type=text],input[type=number],select,textarea{width:100%;padding:6px 9px;font-size:12px;font-family:var(--font);border:1px solid var(--border-s);border-radius:6px;background:var(--surface);color:var(--txt);outline:none;transition:.15s}
+input:focus,select:focus,textarea:focus{border-color:var(--or)}
+textarea{height:52px;resize:none}
+input[type=file]{font-size:11px;color:var(--txt2);border:none;background:none;padding:0}
+
+/* BUTTONS */
+.btn{width:100%;padding:7px 10px;font-size:12px;font-weight:500;font-family:var(--font);border:none;border-radius:6px;cursor:pointer;transition:.15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-dark{background:var(--txt);color:#fff}.btn-dark:hover{background:#2c2c2a}
+.btn-dark:disabled{background:var(--border-s);color:var(--txt3);cursor:not-allowed}
+.btn-or{background:var(--or);color:#fff}.btn-or:hover{background:#b84d12}
+.btn-ghost{background:var(--or-l);color:var(--or);border:1px solid var(--or-b)}.btn-ghost:hover{background:#f5ddd0}
+.btn-line{background:var(--surface);color:var(--txt2);border:1px solid var(--border-s)}.btn-line:hover{background:var(--bg)}
+
+/* EXPORT */
+.exp-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;padding:10px 12px}
+.bexp{padding:7px 4px;font-size:10px;font-weight:500;font-family:var(--font);border:1px solid var(--border-s);border-radius:6px;background:var(--surface);color:var(--txt2);cursor:pointer;text-align:center;transition:.15s;line-height:1.4}
+.bexp:hover{background:var(--bg);color:var(--txt)}
+
+/* LOG */
+.logbox{margin:0 12px 12px;background:#F8F7F4;border:1px solid var(--border);border-radius:6px;padding:7px 9px;max-height:72px;overflow-y:auto;font-family:var(--mono);font-size:10px;color:var(--txt2)}
+.ls{color:var(--gn)}.le{color:var(--rd)}
+
+/* LEGEND */
+.legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--border)}
+.li{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--txt2)}
+.ld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{background:var(--surface);color:var(--txt);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.1);font-family:var(--font)}
+.leaflet-popup-tip{background:var(--surface)}
+.pn{font-size:13px;font-weight:600}.pd{font-size:11px;color:var(--txt2);margin-top:2px}
+.pb{display:inline-block;margin-top:4px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500}
+.bok{background:var(--gn-l);color:var(--gn)}.bor{background:var(--rd-l);color:var(--rd)}.boman{background:var(--or-l);color:var(--or)}
+
+::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:var(--border-s);border-radius:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><div class="brand-logo">Z</div>ZARIS</div>
+  <div class="hdiv"></div>
+  <span class="hmod">Geocodificador</span>
+  <div class="hright">
+    <span class="htime" id="clockEl"></span>
+    <div class="uavatar">CZ</div>
+  </div>
+</header>
+
+<div class="body">
+
+  <!-- MAPA — izquierda -->
+  <div id="map"></div>
+
+  <!-- PANEL — derecha -->
+  <div class="panel">
+
+    <div class="metrics">
+      <div class="mc or"><div class="mc-lbl">Mapeados</div><div class="mc-val" id="mP">0</div><div class="mc-sub">en el mapa</div></div>
+      <div class="mc gn"><div class="mc-lbl">Encontrados</div><div class="mc-val" id="mO">0</div><div class="mc-sub">geocodificados</div></div>
+      <div class="mc rd"><div class="mc-lbl">Sin resultado</div><div class="mc-val" id="mE">0</div><div class="mc-sub">no localizados</div></div>
+      <div class="mc"><div class="mc-lbl">Total filas</div><div class="mc-val" id="mT">0</div><div class="mc-sub">procesadas</div></div>
+    </div>
+
+    <div class="sec">
+      <div class="tabs">
+        <button class="tb on" onclick="openTab('csv',this)">CSV/XLS</button>
+        <button class="tb" onclick="openTab('img',this)">OCR</button>
+        <button class="tb" onclick="openTab('ll',this)">Lat/Lon</button>
+        <button class="tb" onclick="openTab('utm',this)">UTM</button>
+      </div>
+
+      <!-- CSV -->
+      <div id="pane-csv" class="tp on">
+        <button onclick="descargarPlantilla()" class="btn btn-ghost">⬇ Descargar plantilla Excel</button>
+        <input type="file" accept=".xlsx,.csv" onchange="leerArchivo(event)">
+        <button id="btnStart" onclick="iniciarGeocodificacion()" disabled class="btn btn-dark">Iniciar geocodificación</button>
+      </div>
+
+      <!-- OCR -->
+      <div id="pane-img" class="tp">
+        <input type="file" id="imgInput" accept="image/*">
+        <button onclick="extraerTextoImagen()" class="btn btn-line">Extraer texto con IA</button>
+        <textarea id="textoExtraido" placeholder="Texto detectado..."></textarea>
+        <button onclick="geocodificarTextoManual()" class="btn btn-dark">Buscar en mapa</button>
+      </div>
+
+      <!-- Lat/Lon -->
+      <div id="pane-ll" class="tp">
+        <input type="text" id="manName" placeholder="Nombre / etiqueta">
+        <input type="number" id="manLat" placeholder="Latitud (ej: -34.52)">
+        <input type="number" id="manLon" placeholder="Longitud (ej: -58.48)">
+        <button onclick="agregarLatLonManual()" class="btn btn-or">Agregar punto</button>
+      </div>
+
+      <!-- UTM -->
+      <div id="pane-utm" class="tp">
+        <div style="display:flex;gap:7px">
+          <input type="number" id="utmZone" value="21" placeholder="Zona" style="width:50%">
+          <select id="utmHemi" style="width:50%">
+            <option value="+south">Sur</option>
+            <option value="">Norte</option>
+          </select>
+        </div>
+        <p style="font-size:10px;color:var(--txt3)">Columnas: X / ESTE y Y / NORTE</p>
+        <input type="file" accept=".xlsx,.csv" onchange="leerArchivoUTM(event)">
+      </div>
+    </div>
+
+    <div class="logbox" id="logBox"><div>Sistema listo</div></div>
+
+    <div class="legend">
+      <div class="li"><div class="ld" style="background:#2E7D52"></div>Encontrado</div>
+      <div class="li"><div class="ld" style="background:#D35C1A"></div>Manual</div>
+      <div class="li"><div class="ld" style="background:#7F77DD"></div>UTM</div>
+      <div class="li"><div class="ld" style="background:#C0392B"></div>Sin resultado</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-head">Exportar</div>
+      <div class="exp-row">
+        <button class="bexp" onclick="descargarGeoJSON()">GeoJSON<br><span style="color:var(--txt3);font-size:9px">QGIS</span></button>
+        <button class="bexp" onclick="descargarCSV()">CSV<br><span style="color:var(--txt3);font-size:9px">PostGIS/BI</span></button>
+        <button class="bexp" onclick="descargarExcel()">Excel<br><span style="color:var(--txt3);font-size:9px">Auditoría</span></button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── ESTADO ──
+var userData = [];
+var allResults = [];
+var metOk = 0;
+var metErr = 0;
+var leafletMap;
+var mapBounds;
+var geojsonData = {
+  type: "FeatureCollection",
+  name: "Geocodificador_ZARIS",
+  crs: { type: "name", properties: { name: "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+  features: []
+};
+var COLORES = { CSV: '#2E7D52', Manual: '#D35C1A', UTM: '#7F77DD', Imagen: '#C0392B' };
+
+// ── RELOJ ──
+function actualizarReloj() {
+  var n = new Date();
+  document.getElementById('clockEl').textContent =
+    n.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ', ' + n.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+}
+actualizarReloj();
+setInterval(actualizarReloj, 30000);
+
+// ── MAPA ──
+window.onload = function () {
+  leafletMap = L.map('map', { zoomControl: true }).setView([-34.526, -58.477], 14);
+  mapBounds = L.latLngBounds();
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 20
+  }).addTo(leafletMap);
+};
+
+// ── TABS ──
+function openTab(id, btn) {
+  document.querySelectorAll('.tp').forEach(function (p) { p.classList.remove('on'); });
+  document.querySelectorAll('.tb').forEach(function (b) { b.classList.remove('on'); });
+  document.getElementById('pane-' + id).classList.add('on');
+  btn.classList.add('on');
+}
+
+// ── LOG ──
+function addLog(msg, tipo) {
+  var box = document.getElementById('logBox');
+  var d = document.createElement('div');
+  d.className = tipo === 'success' ? 'ls' : tipo === 'error' ? 'le' : '';
+  d.textContent = msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── MÉTRICAS ──
+function actualizarMetricas() {
+  document.getElementById('mP').textContent = allResults.filter(function (r) { return r.Latitud; }).length;
+  document.getElementById('mO').textContent = metOk;
+  document.getElementById('mE').textContent = metErr;
+  document.getElementById('mT').textContent = allResults.length;
+}
+
+// ── AGREGAR PUNTO AL MAPA ──
+function agregarPunto(lat, lon, label, rowObj) {
+  var color = COLORES[rowObj.Origen] || '#2E7D52';
+  var badgeClass = rowObj.Origen === 'Manual' ? 'boman' : rowObj.Origen === 'Imagen' ? 'bor' : 'bok';
+
+  L.circleMarker([lat, lon], {
+    radius: 7, fillColor: color, color: '#fff', weight: 1.5, opacity: 1, fillOpacity: 0.9
+  }).bindPopup(
+    '<div>' +
+    '<div class="pn">' + (label || 'Punto') + '</div>' +
+    '<div class="pd">' + lat.toFixed(5) + ', ' + lon.toFixed(5) + '</div>' +
+    '<div class="pd">' + (rowObj.GEOCODING || rowObj.Direccion || '') + '</div>' +
+    '<span class="pb ' + badgeClass + '">' + rowObj.Origen + '</span>' +
+    '</div>'
+  ).addTo(leafletMap);
+
+  // Ajustar bounds solo si hay coordenadas válidas
+  mapBounds.extend([lat, lon]);
+  if (mapBounds.isValid()) {
+    leafletMap.fitBounds(mapBounds, { padding: [40, 40], maxZoom: 16 });
+  }
+
+  rowObj.Latitud = lat;
+  rowObj.Longitud = lon;
+  if (!rowObj.Estado) rowObj.Estado = 'Encontrado';
+  if (allResults.indexOf(rowObj) === -1) allResults.push(rowObj);
+
+  geojsonData.features.push({
+    type: "Feature",
+    properties: rowObj,
+    geometry: { type: "Point", coordinates: [lon, lat] }
+  });
+  actualizarMetricas();
+}
+
+// ── TAB CSV ──
+function descargarPlantilla() {
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet([
+    ["Name", "LOCALIDAD", "GEOCODING"],
+    ["Municipalidad", "Vicente López", "Av. Maipú 2609, Vicente López, Buenos Aires, Argentina"]
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
+  XLSX.writeFile(wb, "Plantilla_Geo_VL.xlsx");
+}
+
+function leerArchivo(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+    userData = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+    var tieneCol = userData.length > 0 && Object.keys(userData[0]).some(function (h) {
+      return h.trim().toUpperCase() === 'GEOCODING';
+    });
+    var btn = document.getElementById('btnStart');
+    if (tieneCol) {
+      addLog('✔ ' + userData.length + ' filas cargadas', 'success');
+      btn.disabled = false;
+    } else {
+      addLog('✖ Falta columna GEOCODING', 'error');
+      btn.disabled = true;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function iniciarGeocodificacion() {
+  addLog('Procesando ' + userData.length + ' direcciones…');
+  for (var i = 0; i < userData.length; i++) {
+    var row = userData[i];
+    var gk = Object.keys(row).find(function (k) { return k.trim().toUpperCase() === 'GEOCODING'; });
+    var addr = gk ? row[gk] : null;
+    var rd = Object.assign({}, row, { Origen: "CSV", Latitud: "", Longitud: "", Estado: "Pendiente" });
+
+    if (addr) {
+      try {
+        var res = await fetch(
+          'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(addr) + '&format=json&limit=1',
+          { headers: { 'Accept-Language': 'es', 'User-Agent': 'ZARIS_Geocodificador' } }
+        );
+        var data = await res.json();
+        if (data && data.length > 0) {
+          rd.Estado = "Encontrado"; metOk++;
+          agregarPunto(parseFloat(data[0].lat), parseFloat(data[0].lon), row.Name || 'CSV', rd);
+          addLog('✔ ' + addr.split(',')[0], 'success');
+        } else {
+          rd.Estado = "No encontrado"; metErr++;
+          allResults.push(rd); actualizarMetricas();
+          addLog('✖ ' + addr.split(',')[0], 'error');
+        }
+      } catch (err) {
+        rd.Estado = "Error red"; metErr++;
+        allResults.push(rd); actualizarMetricas();
+        addLog('✖ Error de red', 'error');
+      }
+      await new Promise(function (r) { setTimeout(r, 1100); });
+    } else {
+      rd.Estado = "Sin dirección";
+      allResults.push(rd); actualizarMetricas();
+    }
+  }
+  addLog('✔ Finalizado', 'success');
+}
+
+// ── TAB OCR ──
+async function extraerTextoImagen() {
+  var inp = document.getElementById('imgInput');
+  if (!inp.files || !inp.files.length) { addLog('Seleccioná una imagen', 'error'); return; }
+  addLog('IA analizando imagen…');
+  try {
+    var result = await Tesseract.recognize(inp.files[0], 'spa');
+    document.getElementById('textoExtraido').value = result.data.text.trim().replace(/\n/g, ', ');
+    addLog('✔ Texto extraído', 'success');
+  } catch (e) {
+    addLog('✖ Error al procesar imagen', 'error');
+  }
+}
+
+async function geocodificarTextoManual() {
+  var addr = document.getElementById('textoExtraido').value;
+  if (!addr) return;
+  var rd = { Name: "OCR", Origen: "Imagen", Direccion: addr, Estado: "Pendiente" };
+  try {
+    var res = await fetch(
+      'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(addr) + '&format=json&limit=1',
+      { headers: { 'Accept-Language': 'es', 'User-Agent': 'ZARIS_Geocodificador' } }
+    );
+    var data = await res.json();
+    if (data && data.length > 0) {
+      rd.Estado = "Encontrado"; metOk++;
+      agregarPunto(parseFloat(data[0].lat), parseFloat(data[0].lon), "OCR", rd);
+      addLog('✔ Imagen mapeada', 'success');
+    } else {
+      rd.Estado = "No encontrado"; metErr++;
+      allResults.push(rd); actualizarMetricas();
+      addLog('✖ No encontrado', 'error');
+    }
+  } catch (e) { addLog('✖ Error de red', 'error'); }
+}
+
+// ── TAB LAT/LON ──
+function agregarLatLonManual() {
+  var lat = parseFloat(document.getElementById('manLat').value);
+  var lon = parseFloat(document.getElementById('manLon').value);
+  var name = document.getElementById('manName').value || 'Punto manual';
+  if (isNaN(lat) || isNaN(lon)) { addLog('✖ Coordenadas inválidas', 'error'); return; }
+  agregarPunto(lat, lon, name, { Name: name, Origen: "Manual" });
+  addLog('✔ ' + name + ' agregado', 'success');
+}
+
+// ── TAB UTM ──
+function leerArchivoUTM(e) {
+  var file = e.target.files[0];
+  var zone = document.getElementById('utmZone').value;
+  var hemi = document.getElementById('utmHemi').value;
+  if (!zone) { addLog('✖ Indicá la zona UTM', 'error'); return; }
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    var pU = '+proj=utm +zone=' + zone + ' ' + hemi + ' +datum=WGS84 +units=m +no_defs';
+    var pW = '+proj=longlat +datum=WGS84 +no_defs';
+    var count = 0;
+    rows.forEach(function (row) {
+      var xk = Object.keys(row).find(function (k) { return ['X', 'ESTE', 'EASTING'].indexOf(k.toUpperCase()) !== -1; });
+      var yk = Object.keys(row).find(function (k) { return ['Y', 'NORTE', 'NORTHING'].indexOf(k.toUpperCase()) !== -1; });
+      if (xk && yk) {
+        var x = parseFloat(row[xk]), y = parseFloat(row[yk]);
+        if (!isNaN(x) && !isNaN(y)) {
+          try {
+            var coords = proj4(pU, pW, [x, y]);
+            agregarPunto(coords[1], coords[0], row.Name || 'UTM', Object.assign({}, row, { Origen: "UTM" }));
+            count++;
+          } catch (err) { addLog('✖ Error conversión UTM fila', 'error'); }
+        }
+      }
+    });
+    addLog('✔ ' + count + ' puntos UTM cargados', 'success');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── EXPORTAR ──
+function descargarGeoJSON() {
+  if (!allResults.length) { addLog('Sin datos para exportar', 'error'); return; }
+  var a = document.createElement('a');
+  a.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojsonData));
+  a.download = "VL_Geocodificado.geojson";
+  a.click();
+}
+
+function descargarCSV() {
+  if (!allResults.length) { addLog('Sin datos para exportar', 'error'); return; }
+  var blob = new Blob(["\uFEFF" + Papa.unparse(allResults)], { type: 'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = "VL_PostGIS.csv";
+  a.click();
+}
+
+function descargarExcel() {
+  if (!allResults.length) { addLog('Sin datos para exportar', 'error'); return; }
+  var ws = XLSX.utils.json_to_sheet(allResults);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
+  XLSX.writeFile(wb, "VL_Auditoria.xlsx");
+}
+</script>
+</body>
+</html>
